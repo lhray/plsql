@@ -1,0 +1,495 @@
+create or replace package FMP_TopDownLevelNodes is
+
+  g_eErrLevel exception;
+
+  function FMF_CompareLevel(pIn_n1stRuleID in number,
+                            pIn_n2ndRuleID in number) return signtype;
+
+  procedure FMSP_GetDownLevelNodesByNodes(pIn_cUpAggNodes IN clob,
+                                          pIn_nDownRuleID IN number,
+                                          pOut_Result     OUT sys_refcursor,
+                                          pOut_nSqlCode   OUT number,
+                                          pOut_vErrMsg    OUT varchar2);
+
+  procedure FMSP_GetDownLevelNodesByCdt(pIn_nUpRuleID   IN number,
+                                        pIn_vConditions IN clob,
+                                        pIn_nDownRuleID IN number,
+                                        pOut_Result     OUT sys_refcursor,
+                                        pOut_nSqlCode   OUT number,
+                                        pOut_vErrMsg    OUT varchar2);
+
+  procedure FMSP_GetUpLevelNodesByNodes(pIn_cDownLevelNodes IN clob,
+                                        pIn_nNodetype       IN number,
+                                        pIn_nUpRuleID       IN number,
+                                        pOut_Result         OUT sys_refcursor,
+                                        pOut_nSqlCode       OUT number,
+                                        pOut_vErrMsg        OUT varchar2);
+end FMP_TopDownLevelNodes;
+/
+create or replace package body FMP_TopDownLevelNodes is
+  --*****************************************************************
+  -- Description: get top and down level nodes in top-down splitting.
+  --
+  -- Author:  JY.Liu
+  -- Revision History
+  -- Version      Date            Author       Reason for Change
+  -- --------------------------------------------------------------
+  --  V7.0        20-DEC-2012     JY.Liu      Created.
+  -- **************************************************************
+  function FMF_CompareLevel(pIn_n1stRuleID in number,
+                            pIn_n2ndRuleID in number) return signtype
+  --*****************************************************************
+    -- Description: compare the 1st aggregation rule and the 2nd aggregation rule:
+    --       1 1st level is higer than 2nd
+    --       0 1st level is equal to  2nd
+    --       -1 1st level is lower than  2nd
+    --
+    -- Parameters:
+    --       pIn_n1stRuleID:
+    --       pIn_n2ndRuleID:
+    -- Error Conditions Raised:
+    --
+    -- Author:  JY.Liu
+    -- Revision History
+    -- Version      Date            Author       Reason for Change
+    -- --------------------------------------------------------------
+    --  V7.0        20-DEC-2012     JY.Liu      Created.
+    -- **************************************************************
+   is
+    nResult     number := 0;
+    chFlag      varchar(3);
+    n1stPlevel  number := null;
+    n1stSTLevel number := null;
+    n1stTCLevel number := null;
+  
+    n2ndPlevel  number := null;
+    n2ndSTLevel number := null;
+    n2ndTCLevel number := null;
+  
+    nGreatestVal number := 999999999999999999;
+    cType        char(1); -- n;0;1 represent nagtive ;zero ;positive
+  
+  begin
+  
+    select nvl(decode(p.regroup_pro, 0, nGreatestVal, p.regroup_pro),
+               nGreatestVal),
+           nvl(decode(p.regroup_geo, 0, nGreatestVal, p.regroup_geo),
+               nGreatestVal),
+           nvl(decode(p.regroup_dis, 0, nGreatestVal, p.regroup_dis),
+               nGreatestVal)
+      into n1stPlevel, n1stSTLevel, n1stTCLevel
+      from prv p
+     where p.prv_em_addr = pIn_n1stRuleID;
+  
+    select nvl(decode(p.regroup_pro, 0, nGreatestVal, p.regroup_pro),
+               nGreatestVal),
+           nvl(decode(p.regroup_geo, 0, nGreatestVal, p.regroup_geo),
+               nGreatestVal),
+           nvl(decode(p.regroup_dis, 0, nGreatestVal, p.regroup_dis),
+               nGreatestVal)
+      into n2ndPlevel, n2ndSTLevel, n2ndTCLevel
+      from prv p
+     where p.prv_em_addr = pIn_n2ndRuleID;
+  
+    nResult := sign(n1stPlevel - n2ndPlevel);
+    if nResult = -1 then
+      cType := 'n'; --nagtive
+    else
+      cType := nResult;
+    end if;
+    nResult := nvl(sign(n1stSTlevel - n2ndSTlevel), 1);
+    if nResult = -1 then
+      cType := 'n'; --nagtive
+    else
+      cType := nResult;
+    end if;
+    chFlag  := chFlag || cType;
+    nResult := nvl(sign(n1stTClevel - n2ndTClevel), 1);
+    if nResult = -1 then
+      cType := 'n'; --nagtive
+    else
+      cType := nResult;
+    end if;
+    chFlag := chFlag || cType;
+  
+    if chFlag = '000' then
+      nResult := 0;
+    elsif instr(chFlag, 'n') <> 0 and instr(chFlag, '1') = 0 then
+      --e.g.  n00 nn0 nnn 00n 0n0 0nn
+      nResult := -1;
+    elsif instr(chFlag, 'n') = 0 and instr(chFlag, '1') <> 0 then
+      --e.g. 100 110 111 001 010 011
+      nResult := 1;
+    else
+      --e.g. 10n n01 etc...
+      raise g_eErrLevel;
+    end if;
+  
+    return nResult;
+  exception
+    when others then
+      raise_application_error(-20004, sqlcode);
+  end;
+  procedure FMSP_GetDownLevelNodesByNodes(pIn_cUpAggNodes IN clob,
+                                          pIn_nDownRuleID IN number,
+                                          pOut_Result     OUT sys_refcursor,
+                                          pOut_nSqlCode   OUT number,
+                                          pOut_vErrMsg    OUT varchar2)
+  --*****************************************************************
+    -- Description: get up-down level nodes
+    --
+    -- Parameters:
+    --       pIn_cUpAggNodes:
+    --       pIn_nDownRuleID:
+    --       pOut_Result:
+    --       pOut_nSqlCode:
+    --       pOut_vErrMsg:
+    -- Error Conditions Raised:
+    --
+    -- Author:  JY.Liu
+    -- Revision History
+    -- Version      Date            Author       Reason for Change
+    -- --------------------------------------------------------------
+    --  V7.0        20-DEC-2012     JY.Liu      Created.
+    -- **************************************************************
+   as
+    tNestedtab     fmt_nest_tab_nodeid;
+    n1stRuleID     number;
+    nIsHigherLevel number := 1;
+  
+  begin
+    pOut_nSqlCode := 0;
+    pOut_vErrMsg  := '';
+    fmp_log.FMP_SetValue(pIn_cUpAggNodes);
+    fmp_log.FMP_SetValue(pIn_nDownRuleID);
+    fmp_log.LOGBEGIN;
+    fmsp_clobtonestedtable(pIn_cClob     => pIn_cUpAggNodes,
+                           pOut_tNestTab => tNestedtab,
+                           pOut_nSqlCode => pOut_nSqlCode);
+  
+    select p.prv15_em_addr
+      into n1stRuleID
+      from prvsel p
+     where p.sel16_em_addr =
+           (select id from table(tNestedtab) where rownum < 2);
+  
+    if pIn_nDownRuleID <> 0 then
+      nIsHigherLevel := FMF_CompareLevel(n1stRuleID, pIn_nDownRuleID);
+    end if;
+    if nIsHigherLevel = -1 then
+      raise g_eErrLevel;
+    end if;
+  
+    if pIn_nDownRuleID = 0 then
+      --detail node
+      open pOut_Result for
+      --UpNodeID  UpNodeBdgID DownNodeID  DownNodeBdgID UpNodeName  DownNodeName
+        select t.id          upnodeid,
+               g.bdg_em_addr upnodebdgid,
+               p.pvt_em_addr downnodeid,
+               d.bdg_em_addr downbdgid,
+               s.sel_cle     upnodename,
+               p.pvt_cle     downnodename
+          from table(tNestedtab) t
+          left join sel s
+            on s.sel_bud = 71
+           and s.sel_em_addr = t.id
+          left join bdg g
+            on g.id_bdg = 71
+           and g.b_cle = s.sel_cle
+          left join rsp r
+            on t.id = r.sel13_em_addr
+          left join pvt p
+            on p.pvt_em_addr = r.pvt14_em_addr
+          left join bdg d
+            on d.id_bdg = 80
+           and d.b_cle = p.pvt_cle
+         order by upnodename, downnodename;
+    
+    else
+      --aggregate node
+      open pOut_Result for
+      --UpNodeID  UpNodeBdgID DownNodeID  DownNodeBdgID UpNodeName  DownNodeName
+        select distinct t.id          upnodeid,
+                        g.bdg_em_addr upnodebdgid,
+                        y.selid       downnodeid,
+                        d.bdg_em_addr downbdgid,
+                        s1.sel_cle    upnodename,
+                        s2.sel_cle    downnodename
+          from table(tNestedtab) t
+          left join sel s1
+            on s1.sel_bud = 71
+           and s1.sel_em_addr = t.id
+          left join bdg g
+            on g.id_bdg = 71
+           and g.b_cle = s1.sel_cle
+          left join rsp r
+            on r.sel13_em_addr = t.id
+          left join prvselpvt y
+            on y.prvid = pIn_nDownRuleID
+           and y.pvtid = r.pvt14_em_addr
+          left join sel s2
+            on y.selid = s2.sel_em_addr
+          left join bdg d
+            on d.id_bdg = 71
+           and d.b_cle = s2.sel_cle
+         order by upnodename, downnodename;
+    end if;
+    fmp_log.LOGend;
+  exception
+    when NO_DATA_FOUND then
+      pOut_nSqlcode := sqlcode;
+      pOut_vErrMsg  := 'The error node list specified';
+      fmp_log.LOGERROR;
+      raise_application_error(p_constant.e_oraerr, pOut_vErrMsg);
+    when g_eErrLevel then
+      pOut_nSqlCode := -20005;
+      pOut_vErrMsg  := 'error level';
+      raise_application_error(pOut_nSqlCode, pOut_vErrMsg);
+    when others then
+      pOut_nSqlcode := sqlcode;
+      pOut_vErrMsg  := sqlerrm;
+      fmp_log.LOGERROR;
+      raise_application_error(p_constant.e_oraerr, sqlcode || sqlerrm);
+  end;
+
+  procedure FMSP_GetDownLevelNodesByCdt(pIn_nUpRuleID   IN number,
+                                        pIn_vConditions IN clob,
+                                        pIn_nDownRuleID IN number,
+                                        pOut_Result     OUT sys_refcursor,
+                                        pOut_nSqlCode   OUT number,
+                                        pOut_vErrMsg    OUT varchar2)
+  --*****************************************************************
+    -- Description: get up-down level nodes
+    --
+    -- Parameters:
+    --       pIn_nUpRuleID:
+    --       pIn_vConditions
+    --       pIn_nDownRuleID:
+    --       pOut_Result:
+    --       pOut_nSqlCode:
+    --       pOut_vErrMsg:
+    -- Error Conditions Raised:
+    --
+    -- Author:  JY.Liu
+    -- Revision History
+    -- Version      Date            Author       Reason for Change
+    -- --------------------------------------------------------------
+    --  V7.0        20-DEC-2012     JY.Liu      Created.
+    -- **************************************************************
+   as
+    rTmpCursor     sys_refcursor;
+    nIsHigherLevel number := 1;
+  
+  begin
+    pOut_nSqlCode := 0;
+    pOut_vErrMsg  := '';
+    fmp_log.FMP_SetValue(pIn_nUpRuleID);
+    fmp_log.FMP_SetValue(pIn_vConditions);
+    fmp_log.FMP_SetValue(pIn_nDownRuleID);
+    fmp_log.logbegin;
+  
+    if pIn_nDownRuleID <> 0 then
+      nIsHigherLevel := FMF_CompareLevel(pIn_nUpRuleID, pIn_nDownRuleID);
+    end if;
+    if nIsHigherLevel = -1 then
+      raise g_eErrLevel;
+    end if;
+  
+    p_aggregation.FMSP_GetAggNodesByRuleCdt(pIn_nAggRuleID  => pIn_nUpRuleID,
+                                            pIn_vConditions => pIn_vConditions,
+                                            pOut_Nodes      => rTmpCursor,
+                                            pOut_nSqlCode   => pOut_nSqlCode);
+    if pOut_nSqlCode <> 0 then
+      return;
+    end if;
+  
+    if pIn_nDownRuleID = 0 then
+      --detail node
+      open pOut_Result for
+      --UpNodeID  UpNodeBdgID DownNodeID  DownNodeBdgID UpNodeName  DownNodeName
+        select t.id          upnodeid,
+               g.bdg_em_addr upnodebdgid,
+               p.pvt_em_addr downnodeid,
+               d.bdg_em_addr downbdgid,
+               s.sel_cle     upnodename,
+               p.pvt_cle     downnodename
+          from tb_ts_aggregatenodecon t
+          left join sel s
+            on s.sel_bud = 71
+           and s.sel_em_addr = t.id
+          left join bdg g
+            on g.id_bdg = 71
+           and g.b_cle = s.sel_cle
+          left join rsp r
+            on t.id = r.sel13_em_addr
+          left join pvt p
+            on p.pvt_em_addr = r.pvt14_em_addr
+          left join bdg d
+            on d.id_bdg = 80
+           and d.b_cle = p.pvt_cle
+         order by upnodename, downnodename;
+    else
+      --aggregate node
+      open pOut_Result for
+      --UpNodeID  UpNodeBdgID DownNodeID  DownNodeBdgID UpNodeName  DownNodeName
+        select distinct t.id          upnodeid,
+                        g.bdg_em_addr upnodebdgid,
+                        y.selid       downnodeid,
+                        d.bdg_em_addr downbdgid,
+                        s1.sel_cle    upnodename,
+                        s2.sel_cle    downnodename
+          from tb_ts_aggregatenodecon t
+          left join sel s1
+            on s1.sel_bud = 71
+           and s1.sel_em_addr = t.id
+          left join bdg g
+            on g.id_bdg = 71
+           and g.b_cle = s1.sel_cle
+          left join rsp r
+            on r.sel13_em_addr = t.id
+          left join prvselpvt y
+            on y.prvid = pIn_nDownRuleID
+           and y.pvtid = r.pvt14_em_addr
+          left join sel s2
+            on y.selid = s2.sel_em_addr
+          left join bdg d
+            on d.id_bdg = 71
+           and d.b_cle = s2.sel_cle
+         order by upnodename, downnodename;
+    
+    end if;
+    fmp_log.logend;
+  exception
+    when g_eErrLevel then
+      pOut_nSqlCode := -20005;
+      pOut_vErrMsg  := 'error level';
+      raise_application_error(pOut_nSqlCode, pOut_vErrMsg);
+    when others then
+      pOut_nSqlcode := sqlcode;
+      pOut_vErrMsg  := sqlerrm;
+      raise_application_error(p_constant.e_oraerr, sqlcode || sqlerrm);
+  end;
+
+  procedure FMSP_GetUpLevelNodesByNodes(pIn_cDownLevelNodes IN clob,
+                                        pIn_nNodetype       IN number,
+                                        pIn_nUpRuleID       IN number,
+                                        pOut_Result         OUT sys_refcursor,
+                                        pOut_nSqlCode       OUT number,
+                                        pOut_vErrMsg        OUT varchar2)
+  --*****************************************************************
+    -- Description: get up-down level nodes
+    --
+    -- Parameters:
+    --       pIn_cDownLevelNodes:
+    --       pIn_nNodetype
+    --       pIn_nUpRuleID:
+    --       pOut_Result:
+    --       pOut_nSqlCode:
+    --       pOut_vErrMsg:
+    -- Error Conditions Raised:
+    --
+    -- Author:  JY.Liu
+    -- Revision History
+    -- Version      Date            Author       Reason for Change
+    -- --------------------------------------------------------------
+    --  V7.0        20-DEC-2012     JY.Liu      Created.
+    -- **************************************************************
+   as
+    tNestedtab     fmt_nest_tab_nodeid;
+    nDownRuleID    number;
+    nIsHigherLevel number := 1;
+  
+  begin
+    pOut_nSqlCode := 0;
+    pOut_vErrMsg  := '';
+  
+    fmp_log.FMP_SetValue(pIn_cDownLevelNodes);
+    fmp_log.FMP_SetValue(pIn_nNodetype);
+    fmp_log.FMP_SetValue(pIn_nUpRuleID);
+    fmp_log.logbegin;
+    --convert node list to nested table type
+    fmsp_clobtonestedtable(pIn_cClob     => pIn_cDownLevelNodes,
+                           pOut_tNestTab => tNestedtab,
+                           pOut_nSqlCode => pOut_nSqlCode);
+  
+    if pIn_nNodetype = 1 then
+      --detail node
+      open pOut_Result for
+      --UpNodeID  UpNodeBdgID DownNodeID  DownNodeBdgID UpNodeName  DownNodeName
+        select r.selid       upnodeid,
+               g.bdg_em_addr upnodebdgid,
+               p.pvt_em_addr downnodeid,
+               d.bdg_em_addr downbdgid,
+               s.sel_cle     upnodename,
+               p.pvt_cle     downnodename
+          from table(tNestedtab) t
+          left join pvt p
+            on p.pvt_em_addr = t.id
+          left join bdg d
+            on d.id_bdg = 80
+           and d.b_cle = p.pvt_cle
+          left join prvselpvt r
+            on r.prvid = pIn_nUpRuleID
+           and r.pvtid = p.pvt_em_addr
+          left join sel s
+            on s.sel_bud = 71
+           and s.sel_em_addr = r.selid
+          left join bdg g
+            on g.id_bdg = 71
+           and g.b_cle = s.sel_cle
+         order by upnodename, downnodename;
+    else
+      --aggregation node
+      --fetch only one node to get the aggregation rule
+      select p.prv15_em_addr
+        into nDownRuleID
+        from prvsel p
+       where p.sel16_em_addr =
+             (select id from table(tNestedtab) where rownum < 2);
+      --compare the down level and the up level
+      nIsHigherLevel := FMF_CompareLevel(pIn_nUpRuleID, nDownRuleID);
+      if nIsHigherLevel = -1 then
+        raise g_eErrLevel;
+      end if;
+      open pOut_Result for
+      --UpNodeID  UpNodeBdgID DownNodeID  DownNodeBdgID UpNodeName  DownNodeName
+        select distinct s2.sel_em_addr upnodeid,
+                        d.bdg_em_addr  upnodebdgid,
+                        s1.sel_em_addr downnodeid,
+                        g.bdg_em_addr  downbdgid,
+                        s2.sel_cle     upnodename,
+                        s1.sel_cle     downnodename
+          from table(tNestedtab) t
+          left join sel s1
+            on s1.sel_bud = 71
+           and s1.sel_em_addr = t.id
+          left join bdg g
+            on g.id_bdg = 71
+           and g.b_cle = s1.sel_cle
+          left join rsp r
+            on r.sel13_em_addr = t.id
+          left join prvselpvt y
+            on y.prvid = pIn_nUpRuleID
+           and y.pvtid = r.pvt14_em_addr
+          left join sel s2
+            on y.selid = s2.sel_em_addr
+          left join bdg d
+            on d.id_bdg = 71
+           and d.b_cle = s2.sel_cle
+         order by upnodename, downnodename;
+    end if;
+    fmp_log.logend;
+  exception
+    when g_eErrLevel then
+      pOut_nSqlCode := -20005;
+      pOut_vErrMsg  := 'error level';
+      raise_application_error(pOut_nSqlCode, pOut_vErrMsg);
+    when others then
+      pOut_nSqlcode := sqlcode;
+      pOut_vErrMsg  := sqlerrm;
+      raise_application_error(p_constant.e_oraerr, sqlcode || sqlerrm);
+  end;
+
+end FMP_TopDownLevelNodes;
+/

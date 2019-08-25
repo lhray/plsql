@@ -1,0 +1,14 @@
+drop table LOG_OPERATION;
+create table LOG_OPERATION
+(
+  ID          NUMBER not null,
+  LSESSIONID  VARCHAR2(1000),
+  LDATE       TIMESTAMP(6) default sysdate,
+  LLEVEL      NUMBER(38),
+  LTASK       VARCHAR2(200),
+  LSECTION    VARCHAR2(4000),
+  LPARAMETERS CLOB,
+  LTEXT       VARCHAR2(4000),
+  LSQLTEXT    CLOB,
+  LMODULES    VARCHAR2(400)
+);

@@ -1,0 +1,18 @@
+--Oracle permit user define the error code from -20000 to -20999
+--use raise_application_error to raise the user defined error code and errmsg
+
+p_sqlcode 	:description
+--------------------------------------- 
+	0	:sucessful
+	-20001	:product unbalance tree
+	-20002	:sale territory unbalance tree
+	-20003	:trade channel unbalance tree
+        -20004  :ora error 
+	-20005	:top-down error ,the top level is lower than down level
+	-20006	:parameter not matched.
+        -20998	:parallel procedure completed with error.
+        -20997  :Summarize procedure error 
+
+
+
+

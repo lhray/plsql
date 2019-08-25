@@ -1,0 +1,50 @@
+create tablespace fmuser_fdm datafile '/data3/oradata/fmuser_fdm1.dbf' size 10240m;
+create user fmuser_fdm identified by futurmaster default tablespace fmuser_fdm temporary tablespace temp;
+grant connect,resource to fmuser_fdm;
+grant unlimited tablespace to fmuser_fdm;
+grant create view to fmuser_fdm;
+grant create procedure to fmuser_fdm;
+grant create job to fmuser_fdm;
+grant create materialized view to fmuser_fdm;
+grant create any table to fmuser_fdm;
+grant create any sequence  to fmuser_fdm;
+grant create any type to fmuser_fdm;
+grant execute on dbms_pipe to fmuser_fdm;
+grant execute on dbms_lock to fmuser_fdm;
+grant execute on dbms_job to fmuser_fdm;
+grant debug connect session to fmuser_fdm;
+
+
+
+
+
+-- Created on 4/9/2013 by JYLIU 
+declare
+  -- Local variables here
+begin
+  -- Test statements here
+  for i in (select username name
+              from dba_users
+             where lower(username) like 'fmuser%') loop
+    dbms_output.put_line('create tablespace ' || i.name ||
+                         ' datafile  ''/data3/oradata/' || i.name || '1.dbf''  size 5000m autoextend on; ');
+    dbms_output.put_line('create user ' || i.name ||
+                         ' identified by futurmaster default tablespace ' ||
+                         i.name || ' temporary tablespace temp;');
+    dbms_output.put_line('grant connect,resource to ' || i.name || ';');
+    dbms_output.put_line('grant unlimited tablespace to ' || i.name || ';');
+    dbms_output.put_line('grant create view to ' || i.name || ';');
+    dbms_output.put_line('grant create procedure to ' || i.name || ';');
+    dbms_output.put_line('grant create job to ' || i.name || ';');
+    dbms_output.put_line('grant create materialized view to ' || i.name || ';');
+  
+    dbms_output.put_line('grant create any table to  ' || i.name || ';');
+    dbms_output.put_line('grant create any sequence  to  ' || i.name || ';');
+    dbms_output.put_line('grant create any type to  ' || i.name || ';');
+    dbms_output.put_line('grant execute on dbms_pipe to  ' || i.name || ';');
+    dbms_output.put_line('grant execute on dbms_lock to  ' || i.name || ';');
+    dbms_output.put_line('grant execute on dbms_job to  ' || i.name || ';');
+    dbms_output.put_line('grant execute on dbms_job to  ' || i.name || ';');
+    dbms_output.put_line('grant debug connect session to ' || i.name || ';');
+  end loop;
+end;

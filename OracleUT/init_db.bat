@@ -1,0 +1,1 @@
+FMOracleServer_InitDB.bat fmuser_ut futurmaster 10.86.0.71/fmtest
