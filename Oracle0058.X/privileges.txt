@@ -1,0 +1,18 @@
+--for product env .must grant following 
+grant connect,resource to username;
+grant unlimited tablespace to username;
+grant create view to username;
+grant create procedure to username;
+grant create job to username;
+grant create materialized view to username;
+grant create any table to username;
+grant create any sequence  to username;
+grant create any type to username;
+-- implement async procedrue 
+grant execute on dbms_pipe to username;
+grant execute on dbms_lock to username;
+grant execute on dbms_job to username;
+
+--for develop env,should grant following
+grant debug connect session to username;
+grant read,write on directory dumpdir to username;

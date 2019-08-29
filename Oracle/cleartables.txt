@@ -1,0 +1,32 @@
+-- Created on 9/12/2012 by JYLIU 
+declare
+  -- Local variables here
+  i integer;
+begin
+  -- Test statements here
+
+  for k in (select distinct object_name name, object_type type
+              from user_procedures) loop
+    execute immediate ' drop ' || k.type || ' ' || k.name;
+  end loop;
+
+  for j in (select s.SEQUENCE_NAME from user_sequences s) loop
+    execute immediate ' drop sequence ' || j.SEQUENCE_NAME;
+  end loop;
+
+  for i in (select u.TABLE_NAME, u.temporary from user_tables u) loop
+    if i.temporary = 'Y' then
+      execute immediate ' truncate table ' || i.table_name;
+    end if;
+    begin
+      execute immediate ' drop table ' || i.table_name;
+    exception
+      when others then
+        null;
+    end;
+  end loop;
+exception
+  when others then
+    raise_application_error(-20004, sqlcode || sqlerrm); 
+end;
+/

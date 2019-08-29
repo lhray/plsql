@@ -1,0 +1,9 @@
+select b1.bdg_em_addr,
+       sys_connect_by_path(b2.bdg_em_addr, '/'),
+       sys_connect_by_path(b2.b_cle, '/'),
+       sys_connect_by_path(b2.bdg_desc, '/')
+  from supplier s, bdg b1, bdg b2
+ where s.id_supplier = 78
+   and s.bdg51_em_addr = b1.bdg_em_addr
+   and s.fils_bdg = b2.bdg_em_addr
+connect by prior s.pere_bdg = s.fils_bdg;

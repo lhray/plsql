@@ -1,0 +1,20 @@
+**************************************************************************************
+* Test importing data to oracle database and exporting data from oracle database.
+**************************************************************************************
+* 
+* Usage:
+* 		FMSqlldrTest username password db_sid
+* 	
+* For Example:
+*		[1] with direct connection
+* 		FMSqlldrTest.bat fmuser_syy futurmaster 10.86.0.14:1521/fmorcl
+* 		
+*       [2] with tns connection, the tns name 'myorcl' is configured in the file tnsnames.ora
+* 		FMSqlldrTest.bat fmuser_syy futurmaster myorcl
+* 
+* Result:
+* 		1) FMSqlldrTest.Log
+*		2) 20000432c_TBMID260258_0000432C.LOG
+*		3) Datas.txt
+*
+**************************************************************************************

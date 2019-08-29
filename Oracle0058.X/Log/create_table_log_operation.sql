@@ -1,0 +1,52 @@
+create table FM$$_LOG_OPERATION
+(
+  ID          NUMBER not null,
+  LSESSIONID  VARCHAR2(1000),
+  LDATE       TIMESTAMP(6) default sysdate,
+  LLEVEL      NUMBER(38),
+  LTASK       VARCHAR2(200),
+  LSECTION    VARCHAR2(4000),
+  LPARAMETERS CLOB,
+  LTEXT       VARCHAR2(4000),
+  LSQLTEXT    CLOB,
+  LMODULES    VARCHAR2(400)
+);
+
+create table FM$$_LOG_OPERATION_LEVEL
+(
+  LLEVEL       NUMBER(4),
+  LJLEVEL      NUMBER(5),
+  LSYSLOGEQUIV NUMBER(4),
+  LCODE        VARCHAR2(10),
+  LDESC        VARCHAR2(255),
+  LTYPE        VARCHAR2(1)
+);
+
+CREATE TABLE FM$$_TLOG
+(
+  ID           NUMBER, 
+  LDATE        TIMESTAMP DEFAULT SYSDATE,    
+  LLEVEL       NUMBER(38), 
+  LSECTION     VARCHAR2(2000 BYTE),
+  LTEXT        VARCHAR2(2000 BYTE),    
+  LTASK        VARCHAR2(200 BYTE), 
+  LPARAMETERS  VARCHAR2(2000 BYTE),
+  LMODULES     VARCHAR2(400 BYTE), 
+  LPRIRORITY   NUMBER,      
+  LHSECS       NUMBER(38),
+  LUSER        VARCHAR2(30 BYTE), 
+  LSQLTEXT     CLOB);
+
+
+
+
+CREATE TABLE FM$$_TLOGLEVEL
+(
+ LLEVEL       number (4,0),
+ LJLEVEL      number (5,0),
+ LSYSLOGEQUIV number (4,0),
+ LCODE       varchar2(10),
+ LDESC        varchar2(255)
+);
+
+
